@@ -1,0 +1,24 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+env/
+
+# PyCharm
+.idea/
+
+# Environment variables
+.env
+
+# Miscellaneous
+*.log
+*.bak
+*.tmp
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Prompts directory
+Prompts/
