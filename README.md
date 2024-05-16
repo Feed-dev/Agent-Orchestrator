@@ -1,3 +1,5 @@
+### This is based on Maestro by Doriandarko, find his original work here: https://github.com/Doriandarko/maestro
+
 # Maestro - A Framework for Claude Opus, GPT and local LLMs to Orchestrate Subagents
 
 
