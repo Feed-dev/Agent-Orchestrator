@@ -1,5 +1,0 @@
-Create a custom CrewAi tool that integrates the Wolfram Alpha LLM API.
-Wolfram|Alpha LLM APIReference: https://products.wolframalpha.com/llm-api/documentation
-Creating your own Tools for CrewAi: https://docs.crewai.com/core-concepts/Tools/#creating-your-own-tools
-Take a deep breath and work step by step.
-
