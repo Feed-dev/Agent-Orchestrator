@@ -1,11 +1,21 @@
-### sourced from: https://github.com/Doriandarko/maestro
-
 # Maestro - A Framework for Claude Opus, GPT and local LLMs to Orchestrate Subagents
 
 
 This Python script demonstrates an AI-assisted task breakdown and execution workflow using the Anthropic API. It utilizes two AI models, Opus and Haiku, to break down an objective into sub-tasks, execute each sub-task, and refine the results into a cohesive final output.
 
-## New: Run locally with LMStudio or Ollama
+## New: 
+
+# GPT-4o
+
+The GPT script has been updated from the ground up to support the code capabilities of GPT-4o
+
+Afeter installing dependecies run
+
+```bash
+python maestro-gpt4o.py
+```
+
+## Run locally with LMStudio or Ollama
 
 ### Lmstudio
 
