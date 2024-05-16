@@ -22,3 +22,6 @@ env/
 
 # Prompts directory
 Prompts/
+
+# Orchestrator Logs
+Archived_logs/
