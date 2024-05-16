@@ -6,9 +6,16 @@ from rich.panel import Panel
 from datetime import datetime
 import json
 from tavily import TavilyClient
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Retrieve the API keys from environment variables
+anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+tavil_api_key = os.getenv("TAVIL_API_KEY")
 
 # Set up the Anthropic API client
-client = Anthropic(api_key="ANTHROPIC_API_KEY")
+client = Anthropic(api_key=anthropic_api_key)
 
 # Available Claude models:
 # Claude 3 Opus	    claude-3-opus-20240229
@@ -97,7 +104,7 @@ def haiku_sub_agent(prompt, search_query=None, previous_haiku_tasks=None, use_se
     qna_response = None
     if search_query and use_search:
         # Initialize the Tavily client
-        tavily = TavilyClient(api_key="TAIVLY_API_KEY")
+        tavily = TavilyClient(api_key=tavil_api_key)
         # Perform a QnA search based on the search query
         qna_response = tavily.qna_search(query=search_query)
         console.print(f"QnA response: {qna_response}", style="yellow")
