@@ -26,6 +26,7 @@ ORCHESTRATOR_MODEL = "claude-3-opus-20240229"
 SUB_AGENT_MODEL = "claude-3-sonnet-20240229"
 REFINER_MODEL = "claude-3-opus-20240229"
 
+
 def calculate_subagent_cost(model, input_tokens, output_tokens):
     # Pricing information per model
     pricing = {
@@ -41,8 +42,10 @@ def calculate_subagent_cost(model, input_tokens, output_tokens):
 
     return total_cost
 
+
 # Initialize the Rich Console
 console = Console()
+
 
 def opus_orchestrator(objective, file_content=None, previous_results=None, use_search=False):
     console.print(f"\n[bold]Calling Orchestrator for your objective[/bold]")
@@ -141,6 +144,7 @@ def haiku_sub_agent(prompt, search_query=None, previous_haiku_tasks=None, use_se
     console.print(Panel(response_text, title="[bold blue]Haiku Sub-agent Result[/bold blue]", title_align="left", border_style="blue", subtitle="Task completed, sending result to Opus 👇"))
     return response_text
 
+
 def opus_refine(objective, sub_task_results, filename, projectname, continuation=False):
     print("\nCalling Opus to provide the refined final output for your objective:")
     messages = [
@@ -171,6 +175,7 @@ def opus_refine(objective, sub_task_results, filename, projectname, continuation
     console.print(Panel(response_text, title="[bold green]Final Output[/bold green]", title_align="left", border_style="green"))
     return response_text
 
+
 def create_folder_structure(project_name, folder_structure, code_blocks):
     # Create the project folder
     try:
@@ -182,6 +187,7 @@ def create_folder_structure(project_name, folder_structure, code_blocks):
 
     # Recursively create the folder structure and files
     create_folders_and_files(project_name, folder_structure, code_blocks)
+
 
 def create_folders_and_files(current_path, structure, code_blocks):
     for key, value in structure.items():
@@ -205,10 +211,12 @@ def create_folders_and_files(current_path, structure, code_blocks):
             else:
                 console.print(Panel(f"Code content not found for file: [bold]{key}[/bold]", title="[bold yellow]Missing Code Content[/bold yellow]", title_align="left", border_style="yellow"))
 
+
 def read_file(file_path):
     with open(file_path, 'r') as file:
         content = file.read()
     return content
+
 
 # Get the objective from user input
 objective = input("Please enter your objective with or without a text file path: ")
