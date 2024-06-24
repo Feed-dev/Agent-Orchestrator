@@ -17,6 +17,7 @@ anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 tavil_api_key = os.getenv("TAVIL_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
 cohere_api_key = os.getenv("COHERE_API_KEY")
+pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 
 # Set up the Anthropic API client
 client = Anthropic(api_key=anthropic_api_key)
@@ -307,9 +308,12 @@ use_search = input("Do you want to use search? (y/n): ").lower() == 'y'
 use_rag = input("Do you want to use RAG with Pinecone? (y/n): ").lower() == 'y'
 pinecone_index = None
 if use_rag:
-    index_name = input("Enter the name of your existing Pinecone index: ")
-    pinecone_index = check_pinecone_index(index_name)
-    if pinecone_index is None:
+    if pinecone_index_name:
+        pinecone_index = check_pinecone_index(pinecone_index_name)
+        if pinecone_index is None:
+            use_rag = False
+    else:
+        console.print("[bold red]Error:[/bold red] PINECONE_INDEX_NAME not set in .env file. RAG search will be disabled.")
         use_rag = False
 
 task_exchanges = []
