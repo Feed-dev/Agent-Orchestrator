@@ -7,15 +7,23 @@ from datetime import datetime
 import json
 from tavily import TavilyClient
 from dotenv import load_dotenv
+from pinecone import Pinecone
+import cohere
 
 load_dotenv()
 
 # Retrieve the API keys from environment variables
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 tavil_api_key = os.getenv("TAVIL_API_KEY")
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
+cohere_api_key = os.getenv("COHERE_API_KEY")
 
 # Set up the Anthropic API client
 client = Anthropic(api_key=anthropic_api_key)
+
+# Initialize Pinecone and Cohere clients
+pc = Pinecone(api_key=pinecone_api_key)
+co = cohere.Client(cohere_api_key)
 
 # Available Claude models:
 # Claude 3 Opus     claude-3-opus-20240229
@@ -26,6 +34,10 @@ client = Anthropic(api_key=anthropic_api_key)
 ORCHESTRATOR_MODEL = "claude-3-5-sonnet-20240620"
 SUB_AGENT_MODEL = "claude-3-5-sonnet-20240620"
 REFINER_MODEL = "claude-3-5-sonnet-20240620"
+
+# Initialize the Rich Console
+console = Console()
+
 
 def calculate_subagent_cost(model, input_tokens, output_tokens):
     # Pricing information per model
@@ -43,25 +55,75 @@ def calculate_subagent_cost(model, input_tokens, output_tokens):
 
     return total_cost
 
-# Initialize the Rich Console
-console = Console()
 
-def opus_orchestrator(objective, file_content=None, previous_results=None, use_search=False):
+def check_pinecone_index(index_name):
+    """Check if a Pinecone index exists and return it if it does."""
+    try:
+        if index_name in pc.list_indexes().names():
+            return pc.Index(index_name)
+        else:
+            console.print(
+                f"[bold red]Error:[/bold red] Pinecone index '{index_name}' does not exist. RAG search will be disabled.")
+            return None
+    except Exception as e:
+        console.print(
+            f"[bold red]Error:[/bold red] Failed to connect to Pinecone. RAG search will be disabled. Error: {str(e)}")
+        return None
+
+
+def query_pinecone(index, query, top_k=5):
+    """Query the Pinecone index and return the top k results."""
+    query_embedding = co.embed(texts=[query], model="embed-multilingual-v3.0").embeddings[0]
+    results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
+    return results.matches
+
+
+def pinecone_rag(index, query, top_k=5):
+    """Perform RAG using Pinecone and return formatted results."""
+    if index is None:
+        return []
+    results = query_pinecone(index, query, top_k)
+    formatted_results = []
+    for result in results:
+        formatted_results.append({
+            'content': result.metadata.get('content', ''),
+            'source': result.metadata.get('source', ''),
+            'score': result.score
+        })
+    return formatted_results
+
+
+def opus_orchestrator(objective, file_content=None, previous_results=None, use_search=False, use_rag=False,
+                      pinecone_index=None):
     console.print(f"\n[bold]Calling Orchestrator for your objective[/bold]")
     previous_results_text = "\n".join(previous_results) if previous_results else "None"
     if file_content:
-        console.print(Panel(f"File content:\n{file_content}", title="[bold blue]File Content[/bold blue]", title_align="left", border_style="blue"))
-    
+        console.print(
+            Panel(f"File content:\n{file_content}", title="[bold blue]File Content[/bold blue]", title_align="left",
+                  border_style="blue"))
+
     messages = [
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": f"Based on the following objective{' and file content' if file_content else ''}, and the previous sub-task results (if any), please break down the objective into the next sub-task, and create a concise and detailed prompt for a subagent so it can execute that task. IMPORTANT!!! when dealing with code tasks make sure you check the code for errors and provide fixes and support as part of the next sub-task. If you find any bugs or have suggestions for better code, please include them in the next sub-task prompt. Please assess if the objective has been fully achieved. If the previous sub-task results comprehensively address all aspects of the objective, include the phrase 'The task is complete:' at the beginning of your response. If the objective is not yet fully achieved, break it down into the next sub-task and create a concise and detailed prompt for a subagent to execute that task.:\n\nObjective: {objective}" + ('\\nFile content:\\n' + file_content if file_content else '') + f"\n\nPrevious sub-task results:\n{previous_results_text}"}
+                {"type": "text",
+                 "text": f"Based on the following objective{' and file content' if file_content else ''}, and the previous sub-task results (if any), please break down the objective into the next sub-task, and create a concise and detailed prompt for a subagent so it can execute that task. IMPORTANT!!! when dealing with code tasks make sure you check the code for errors and provide fixes and support as part of the next sub-task. If you find any bugs or have suggestions for better code, please include them in the next sub-task prompt. Please assess if the objective has been fully achieved. If the previous sub-task results comprehensively address all aspects of the objective, include the phrase 'The task is complete:' at the beginning of your response. If the objective is not yet fully achieved, break it down into the next sub-task and create a concise and detailed prompt for a subagent to execute that task.:\n\nObjective: {objective}" + (
+                     '\\nFile content:\\n' + file_content if file_content else '') + f"\n\nPrevious sub-task results:\n{previous_results_text}"}
             ]
         }
     ]
     if use_search:
-        messages[0]["content"].append({"type": "text", "text": "Please also generate a JSON object containing a single 'search_query' key, which represents a question that, when asked online, would yield important information for solving the subtask. The question should be specific and targeted to elicit the most relevant and helpful resources. Format your JSON like this, with no additional text before or after:\n{\"search_query\": \"<question>\"}\n"})
+        messages[0]["content"].append({"type": "text",
+                                       "text": "Please also generate a JSON object containing a single 'search_query' key, which represents a question that, when asked online, would yield important information for solving the subtask. The question should be specific and targeted to elicit the most relevant and helpful resources. Format your JSON like this, with no additional text before or after:\n{\"search_query\": \"<question>\"}\n"})
+
+    if use_rag and pinecone_index:
+        rag_results = pinecone_rag(pinecone_index, objective)
+        if rag_results:
+            rag_content = "\n".join(
+                [f"Content: {r['content']}\nSource: {r['source']}\nRelevance: {r['score']}" for r in rag_results])
+            messages[0]["content"].append({"type": "text", "text": f"\nRAG Results:\n{rag_content}"})
+        else:
+            console.print("[bold yellow]Warning:[/bold yellow] No RAG results found. Proceeding without RAG data.")
 
     opus_response = client.messages.create(
         model=ORCHESTRATOR_MODEL,
@@ -70,8 +132,10 @@ def opus_orchestrator(objective, file_content=None, previous_results=None, use_s
     )
 
     response_text = opus_response.content[0].text
-    console.print(f"Input Tokens: {opus_response.usage.input_tokens}, Output Tokens: {opus_response.usage.output_tokens}")
-    total_cost = calculate_subagent_cost(ORCHESTRATOR_MODEL, opus_response.usage.input_tokens, opus_response.usage.output_tokens)
+    console.print(
+        f"Input Tokens: {opus_response.usage.input_tokens}, Output Tokens: {opus_response.usage.output_tokens}")
+    total_cost = calculate_subagent_cost(ORCHESTRATOR_MODEL, opus_response.usage.input_tokens,
+                                         opus_response.usage.output_tokens)
     console.print(f"Orchestrator Cost: ${total_cost:.4f}")
 
     search_query = None
@@ -82,16 +146,22 @@ def opus_orchestrator(objective, file_content=None, previous_results=None, use_s
             json_string = json_match.group()
             try:
                 search_query = json.loads(json_string)["search_query"]
-                console.print(Panel(f"Search Query: {search_query}", title="[bold blue]Search Query[/bold blue]", title_align="left", border_style="blue"))
+                console.print(Panel(f"Search Query: {search_query}", title="[bold blue]Search Query[/bold blue]",
+                                    title_align="left", border_style="blue"))
                 response_text = response_text.replace(json_string, "").strip()
             except json.JSONDecodeError as e:
-                console.print(Panel(f"Error parsing JSON: {e}", title="[bold red]JSON Parsing Error[/bold red]", title_align="left", border_style="red"))
-                console.print(Panel(f"Skipping search query extraction.", title="[bold yellow]Search Query Extraction Skipped[/bold yellow]", title_align="left", border_style="yellow"))
+                console.print(Panel(f"Error parsing JSON: {e}", title="[bold red]JSON Parsing Error[/bold red]",
+                                    title_align="left", border_style="red"))
+                console.print(Panel(f"Skipping search query extraction.",
+                                    title="[bold yellow]Search Query Extraction Skipped[/bold yellow]",
+                                    title_align="left", border_style="yellow"))
         else:
             search_query = None
 
-    console.print(Panel(response_text, title=f"[bold green]Opus Orchestrator[/bold green]", title_align="left", border_style="green", subtitle="Sending task to Haiku 👇"))
+    console.print(Panel(response_text, title=f"[bold green]Opus Orchestrator[/bold green]", title_align="left",
+                        border_style="green", subtitle="Sending task to Haiku 👇"))
     return response_text, file_content, search_query
+
 
 def haiku_sub_agent(prompt, search_query=None, previous_haiku_tasks=None, use_search=False, continuation=False):
     if previous_haiku_tasks is None:
@@ -206,6 +276,7 @@ def create_folders_and_files(current_path, structure, code_blocks):
             else:
                 console.print(Panel(f"Code content not found for file: [bold]{key}[/bold]", title="[bold yellow]Missing Code Content[/bold yellow]", title_align="left", border_style="yellow"))
 
+
 # Get the objective from user input
 objective = input("Please enter your objective: ")
 
@@ -218,14 +289,28 @@ if add_file:
     try:
         with open(file_path, 'r') as file:
             file_content = file.read()
-        console.print(Panel(f"File content:\n{file_content}", title="[bold blue]File Content[/bold blue]", title_align="left", border_style="blue"))
+        console.print(
+            Panel(f"File content:\n{file_content}", title="[bold blue]File Content[/bold blue]", title_align="left",
+                  border_style="blue"))
     except FileNotFoundError:
-        console.print(Panel("File not found. Proceeding without file content.", title="[bold red]File Error[/bold red]", title_align="left", border_style="red"))
+        console.print(Panel("File not found. Proceeding without file content.", title="[bold red]File Error[/bold red]",
+                            title_align="left", border_style="red"))
     except IOError:
-        console.print(Panel("Error reading file. Proceeding without file content.", title="[bold red]File Error[/bold red]", title_align="left", border_style="red"))
+        console.print(
+            Panel("Error reading file. Proceeding without file content.", title="[bold red]File Error[/bold red]",
+                  title_align="left", border_style="red"))
 
 # Ask the user if they want to use search
 use_search = input("Do you want to use search? (y/n): ").lower() == 'y'
+
+# Ask the user if they want to use RAG
+use_rag = input("Do you want to use RAG with Pinecone? (y/n): ").lower() == 'y'
+pinecone_index = None
+if use_rag:
+    index_name = input("Enter the name of your existing Pinecone index: ")
+    pinecone_index = check_pinecone_index(index_name)
+    if pinecone_index is None:
+        use_rag = False
 
 task_exchanges = []
 haiku_tasks = []
@@ -235,9 +320,12 @@ while True:
     previous_results = [result for _, result in task_exchanges]
     if not task_exchanges:
         # Pass the file content only in the first iteration if available
-        opus_result, file_content_for_haiku, search_query = opus_orchestrator(objective, file_content, previous_results, use_search)
+        opus_result, file_content_for_haiku, search_query = opus_orchestrator(objective, file_content, previous_results,
+                                                                              use_search, use_rag, pinecone_index)
     else:
-        opus_result, _, search_query = opus_orchestrator(objective, previous_results=previous_results, use_search=use_search)
+        opus_result, _, search_query = opus_orchestrator(objective, previous_results=previous_results,
+                                                         use_search=use_search, use_rag=use_rag,
+                                                         pinecone_index=pinecone_index)
 
     if "The task is complete:" in opus_result:
         # If Opus indicates the task is complete, exit the loop
@@ -276,8 +364,12 @@ if folder_structure_match:
     try:
         folder_structure = json.loads(json_string)
     except json.JSONDecodeError as e:
-        console.print(Panel(f"Error parsing JSON: {e}", title="[bold red]JSON Parsing Error[/bold red]", title_align="left", border_style="red"))
-        console.print(Panel(f"Invalid JSON string: [bold]{json_string}[/bold]", title="[bold red]Invalid JSON String[/bold red]", title_align="left", border_style="red"))
+        console.print(
+            Panel(f"Error parsing JSON: {e}", title="[bold red]JSON Parsing Error[/bold red]", title_align="left",
+                  border_style="red"))
+        console.print(
+            Panel(f"Invalid JSON string: [bold]{json_string}[/bold]", title="[bold red]Invalid JSON String[/bold red]",
+                  title_align="left", border_style="red"))
 
 # Extract code files from the refined output
 code_blocks = re.findall(r'Filename: (\S+)\s*```[\w]*\n(.*?)\n```', refined_output, re.DOTALL)
