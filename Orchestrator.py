@@ -6,26 +6,19 @@ from rich.panel import Panel
 from datetime import datetime
 import json
 from tavily import TavilyClient
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Retrieve the API keys from environment variables
-anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-tavil_api_key = os.getenv("TAVIL_API_KEY")
 
 # Set up the Anthropic API client
-client = Anthropic(api_key=anthropic_api_key)
+client = Anthropic(api_key="YOUR KEY")
 
 # Available Claude models:
-# Claude 3 Opus	    claude-3-opus-20240229
-# Claude 3 Sonnet	claude-3-sonnet-20240229
-# Claude 3 Haiku	claude-3-haiku-20240307
+# Claude 3 Opus     claude-3-opus-20240229
+# Claude 3 Sonnet   claude-3-sonnet-20240229
+# Claude 3 Haiku    claude-3-haiku-20240307
+# Claude 3.5 Sonnet claude-3-5-sonnet-20240620
 
-ORCHESTRATOR_MODEL = "claude-3-opus-20240229"
-SUB_AGENT_MODEL = "claude-3-sonnet-20240229"
-REFINER_MODEL = "claude-3-opus-20240229"
-
+ORCHESTRATOR_MODEL = "claude-3-5-sonnet-20240620"
+SUB_AGENT_MODEL = "claude-3-5-sonnet-20240620"
+REFINER_MODEL = "claude-3-5-sonnet-20240620"
 
 def calculate_subagent_cost(model, input_tokens, output_tokens):
     # Pricing information per model
@@ -33,6 +26,7 @@ def calculate_subagent_cost(model, input_tokens, output_tokens):
         "claude-3-opus-20240229": {"input_cost_per_mtok": 15.00, "output_cost_per_mtok": 75.00},
         "claude-3-haiku-20240307": {"input_cost_per_mtok": 0.25, "output_cost_per_mtok": 1.25},
         "claude-3-sonnet-20240229": {"input_cost_per_mtok": 3.00, "output_cost_per_mtok": 15.00},
+        "claude-3-5-sonnet-20240620": {"input_cost_per_mtok": 3.00, "output_cost_per_mtok": 15.00},
     }
 
     # Calculate cost
@@ -42,10 +36,8 @@ def calculate_subagent_cost(model, input_tokens, output_tokens):
 
     return total_cost
 
-
 # Initialize the Rich Console
 console = Console()
-
 
 def opus_orchestrator(objective, file_content=None, previous_results=None, use_search=False):
     console.print(f"\n[bold]Calling Orchestrator for your objective[/bold]")
@@ -94,7 +86,6 @@ def opus_orchestrator(objective, file_content=None, previous_results=None, use_s
     console.print(Panel(response_text, title=f"[bold green]Opus Orchestrator[/bold green]", title_align="left", border_style="green", subtitle="Sending task to Haiku 👇"))
     return response_text, file_content, search_query
 
-
 def haiku_sub_agent(prompt, search_query=None, previous_haiku_tasks=None, use_search=False, continuation=False):
     if previous_haiku_tasks is None:
         previous_haiku_tasks = []
@@ -107,7 +98,7 @@ def haiku_sub_agent(prompt, search_query=None, previous_haiku_tasks=None, use_se
     qna_response = None
     if search_query and use_search:
         # Initialize the Tavily client
-        tavily = TavilyClient(api_key=tavil_api_key)
+        tavily = TavilyClient(api_key="YOUR API KEY HERE")
         # Perform a QnA search based on the search query
         qna_response = tavily.qna_search(query=search_query)
         console.print(f"QnA response: {qna_response}", style="yellow")
@@ -144,7 +135,6 @@ def haiku_sub_agent(prompt, search_query=None, previous_haiku_tasks=None, use_se
     console.print(Panel(response_text, title="[bold blue]Haiku Sub-agent Result[/bold blue]", title_align="left", border_style="blue", subtitle="Task completed, sending result to Opus 👇"))
     return response_text
 
-
 def opus_refine(objective, sub_task_results, filename, projectname, continuation=False):
     print("\nCalling Opus to provide the refined final output for your objective:")
     messages = [
@@ -175,7 +165,6 @@ def opus_refine(objective, sub_task_results, filename, projectname, continuation
     console.print(Panel(response_text, title="[bold green]Final Output[/bold green]", title_align="left", border_style="green"))
     return response_text
 
-
 def create_folder_structure(project_name, folder_structure, code_blocks):
     # Create the project folder
     try:
@@ -187,7 +176,6 @@ def create_folder_structure(project_name, folder_structure, code_blocks):
 
     # Recursively create the folder structure and files
     create_folders_and_files(project_name, folder_structure, code_blocks)
-
 
 def create_folders_and_files(current_path, structure, code_blocks):
     for key, value in structure.items():
@@ -211,27 +199,23 @@ def create_folders_and_files(current_path, structure, code_blocks):
             else:
                 console.print(Panel(f"Code content not found for file: [bold]{key}[/bold]", title="[bold yellow]Missing Code Content[/bold yellow]", title_align="left", border_style="yellow"))
 
-
-def read_file(file_path):
-    with open(file_path, 'r') as file:
-        content = file.read()
-    return content
-
-
 # Get the objective from user input
-objective = input("Please enter your objective with or without a text file path: ")
+objective = input("Please enter your objective: ")
 
-# Check if the input contains a file path
-if "./" in objective or "/" in objective:
-    # Extract the file path from the objective
-    file_path = re.findall(r'[./\w]+\.[\w]+', objective)[0]
-    # Read the file content
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    # Update the objective string to remove the file path
-    objective = objective.split(file_path)[0].strip()
-else:
-    file_content = None
+# Ask if the user wants to add a file
+add_file = input("Do you want to add a text file? (y/n): ").lower() == 'y'
+
+file_content = None
+if add_file:
+    file_path = input("Please enter the file path: ")
+    try:
+        with open(file_path, 'r') as file:
+            file_content = file.read()
+        console.print(Panel(f"File content:\n{file_content}", title="[bold blue]File Content[/bold blue]", title_align="left", border_style="blue"))
+    except FileNotFoundError:
+        console.print(Panel("File not found. Proceeding without file content.", title="[bold red]File Error[/bold red]", title_align="left", border_style="red"))
+    except IOError:
+        console.print(Panel("Error reading file. Proceeding without file content.", title="[bold red]File Error[/bold red]", title_align="left", border_style="red"))
 
 # Ask the user if they want to use search
 use_search = input("Do you want to use search? (y/n): ").lower() == 'y'
