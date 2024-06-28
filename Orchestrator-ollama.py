@@ -14,11 +14,14 @@ import argparse
 # ollama.pull('llama3:8b')
 # ollama.pull('llama3:70b-instruct')
 # ollama.pull('llama3:instruct')
+# ollama pull dolphin-llama3:8b
+# ollama pull dolphin-llama3:70b
+# ollama pull dolphin-llama3:8b-256k
 
 # Define model identifiers as variables at the top of the script
-ORCHESTRATOR_MODEL = 'llama3:70b-instruct'
-SUBAGENT_MODEL = 'llama3:instruct'
-REFINER_MODEL = 'llama3:70b-instruct'
+ORCHESTRATOR_MODEL = 'dolphin-llama3:8b'
+SUBAGENT_MODEL = 'dolphin-llama3:8b'
+REFINER_MODEL = 'dolphin-llama3:8b'
 
 # check and pull models if they don't exist yet
 for model in [ORCHESTRATOR_MODEL, SUBAGENT_MODEL, REFINER_MODEL]:
